@@ -1,0 +1,6 @@
+{
+  "name": "Resonance Export - US Market Intelligence",
+  "description": "High-density autonomous B2B trade intelligence and multi-web harvester platform for Himalayan artisan exporters targeting US wholesale wellness buyers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
