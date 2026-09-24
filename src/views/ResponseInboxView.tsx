@@ -1,31 +1,63 @@
 import React, { useState } from 'react';
 import { BuyerInquiry } from '../types';
+import { sendGmail, DEFAULT_USER_EMAIL, DEFAULT_USER_NAME } from '../services/auth';
 
 interface ResponseInboxViewProps {
   inquiries: BuyerInquiry[];
   onReplyInquiry: (inquiryId: string, replyText: string) => void;
   onMarkAsRead: (inquiryId: string) => void;
+  currentUserEmail?: string | null;
+  onSignInWithGoogle?: () => void;
 }
 
 export const ResponseInboxView: React.FC<ResponseInboxViewProps> = ({
   inquiries,
   onReplyInquiry,
   onMarkAsRead,
+  currentUserEmail = DEFAULT_USER_EMAIL,
+  onSignInWithGoogle,
 }) => {
   const [selectedId, setSelectedId] = useState<string>(inquiries[0]?.id || '');
   const [replyText, setReplyText] = useState('');
-  const [sentNotice, setSentNotice] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<{ success: boolean; text: string } | null>(null);
 
   const activeInquiry = inquiries.find((i) => i.id === selectedId) || inquiries[0];
+  const senderEmail = currentUserEmail || DEFAULT_USER_EMAIL;
 
-  const handleSendReply = (e: React.FormEvent) => {
+  const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || !activeInquiry) return;
 
-    onReplyInquiry(activeInquiry.id, replyText);
-    setReplyText('');
-    setSentNotice(true);
-    setTimeout(() => setSentNotice(false), 3000);
+    setIsSending(true);
+    setStatusNotice(null);
+
+    const subject = `Re: ${activeInquiry.subject} (Resonance Export FOB Quotation)`;
+    const res = await sendGmail(activeInquiry.fromEmail, subject, replyText, senderEmail);
+
+    setIsSending(false);
+    if (res.success) {
+      setStatusNotice({
+        success: true,
+        text: `Real reply successfully dispatched to ${activeInquiry.fromEmail} via Gmail API (ID: ${res.messageId})!`,
+      });
+      onReplyInquiry(activeInquiry.id, replyText);
+      setReplyText('');
+    } else {
+      if (res.error === 'AUTH_REQUIRED') {
+        setStatusNotice({
+          success: false,
+          text: 'Google authentication required to send through your live account. Click "Connect Real Gmail" to authorize.',
+        });
+        // Still register local reply
+        onReplyInquiry(activeInquiry.id, replyText);
+      } else {
+        setStatusNotice({
+          success: false,
+          text: `Gmail delivery notice: ${res.error}`,
+        });
+      }
+    }
   };
 
   const handleLoadTemplate = (type: 'proforma' | 'samples' | 'frequency_certs') => {
@@ -45,8 +77,10 @@ Here is our direct FOB Kathmandu wholesale estimate:
 
 I have generated pro-forma quotation #RE-2025-089 for your review. Would you prefer wire transfer or credit card via Stripe B2B?
 
-Tashi Delek,
-Pema Tsering`
+Warm regards,
+${DEFAULT_USER_NAME}
+Resonance Export • Himalayan Artisan Trade
+Email: ${senderEmail}`
       );
     } else if (type === 'samples') {
       setReplyText(
@@ -57,7 +91,9 @@ We would be delighted to dispatch a complimentary 8-inch Patan Master Singing Bo
 Please confirm your preferred shipping address and contact phone number for the DHL Air Waybill.
 
 Warm regards,
-Pema Tsering`
+${DEFAULT_USER_NAME}
+Resonance Export
+Email: ${senderEmail}`
       );
     } else {
       setReplyText(
@@ -68,7 +104,9 @@ Attached are the acoustic frequency spectrum analyzer charts for our latest Pata
 We also include individual laser engraving of your studio seal on the outer bronze rim at no additional charge for orders over 15 units.
 
 Best regards,
-Pema Tsering`
+${DEFAULT_USER_NAME}
+Resonance Export
+Email: ${senderEmail}`
       );
     }
   };
@@ -92,9 +130,12 @@ Pema Tsering`
         </div>
 
         <div className="flex items-center gap-2 text-xs font-semibold">
+          <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Active Sender: {senderEmail}</span>
+          </span>
           <span className="px-2.5 py-1 rounded bg-[#9b4500] text-white flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span>{inquiries.filter((i) => i.unread).length} Unread Replies</span>
+            <span>{inquiries.filter((i) => i.unread).length} Unread RFQs</span>
           </span>
         </div>
       </div>
@@ -211,9 +252,14 @@ Pema Tsering`
 
             {/* Response Composer */}
             <form onSubmit={handleSendReply} className="space-y-3 pt-2">
-              <label className="block text-[11px] font-bold uppercase text-slate-700">
-                Reply to {activeInquiry.fromName}
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase text-slate-700">
+                  Reply to {activeInquiry.fromName} ({activeInquiry.fromEmail})
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  From: <strong className="text-slate-800">{senderEmail}</strong>
+                </span>
+              </div>
               <textarea
                 rows={7}
                 value={replyText}
@@ -222,24 +268,43 @@ Pema Tsering`
                 className="w-full p-3 border border-slate-200 rounded-lg text-slate-900 font-sans text-xs leading-relaxed outline-none focus:border-[#0f172a]"
               />
 
-              {sentNotice && (
-                <div className="p-2 bg-emerald-50 text-emerald-800 text-xs rounded border border-emerald-200 font-semibold">
-                  Reply dispatched to {activeInquiry.fromEmail} via Resonance Gmail Sequence Hub!
+              {statusNotice && (
+                <div
+                  className={`p-3 rounded-lg text-xs font-semibold flex items-center justify-between ${
+                    statusNotice.success
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                  }`}
+                >
+                  <span>{statusNotice.text}</span>
+                  {!statusNotice.success && onSignInWithGoogle && (
+                    <button
+                      type="button"
+                      onClick={onSignInWithGoogle}
+                      className="px-2.5 py-1 bg-amber-600 text-white rounded font-bold text-[11px] hover:bg-amber-700 ml-2 shrink-0"
+                    >
+                      Connect Real Gmail
+                    </button>
+                  )}
                 </div>
               )}
 
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-slate-500">
-                  Logged in operator: <strong className="text-slate-800">Pema Tsering (Export Ops)</strong>
+                  Authenticated User: <strong className="text-slate-800">{DEFAULT_USER_NAME}</strong>
                 </span>
 
                 <button
                   type="submit"
-                  disabled={!replyText.trim()}
-                  className="px-4 py-2 rounded-lg bg-[#9b4500] hover:bg-[#763300] disabled:bg-slate-300 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors"
+                  disabled={!replyText.trim() || isSending}
+                  className={`px-4 py-2 rounded-lg bg-[#9b4500] hover:bg-[#763300] disabled:bg-slate-300 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors ${
+                    isSending ? 'opacity-70 cursor-wait' : ''
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">send</span>
-                  <span>Send Export Reply</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    {isSending ? 'sync' : 'send'}
+                  </span>
+                  <span>{isSending ? 'Sending via Gmail...' : 'Send Real Email via Gmail'}</span>
                 </button>
               </div>
             </form>

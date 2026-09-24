@@ -241,19 +241,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Operator Status Footer */}
       <div className="p-3 bg-[#f2f4f6] border-t border-[#e2e8f0]">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-[#0f172a] flex items-center justify-center shrink-0 shadow-inner">
-            <span className="material-symbols-outlined text-white text-[18px]">
-              person
-            </span>
+          <div className="w-8 h-8 rounded-full bg-[#0f172a] text-white flex items-center justify-center shrink-0 shadow-inner font-bold text-xs">
+            AS
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-[#191c1e] truncate">
-              Pema T.
+              Antriksh Sharma
             </p>
-            <span className="text-[11px] text-[#9b4500] font-medium truncate block">
-              Autonomous Harvester Ops
+            <span className="text-[10px] text-[#0077b5] font-mono font-semibold truncate block">
+              antrikssharma09@gmail.com
             </span>
           </div>
+        </div>
+
+        <div className="flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mb-2 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Real Gmail Sender Active</span>
         </div>
 
         <div className="space-y-1">

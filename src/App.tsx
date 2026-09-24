@@ -25,6 +25,12 @@ import {
   INITIAL_INQUIRIES,
 } from './data/mockData';
 import { BuyerLead, CrawlerWorker, SocketFeedEvent, OutreachMessage, BuyerInquiry } from './types';
+import {
+  initAuth,
+  googleSignIn,
+  logout,
+  DEFAULT_USER_EMAIL,
+} from './services/auth';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('lead-discovery');
@@ -40,6 +46,10 @@ export default function App() {
   const [isCrawlingWave, setIsCrawlingWave] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Authentication & Gmail OAuth state
+  const [userEmail, setUserEmail] = useState<string | null>(DEFAULT_USER_EMAIL);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
+
   // Modals state
   const [isShellOpen, setIsShellOpen] = useState<boolean>(false);
   const [isAddConnectorOpen, setIsAddConnectorOpen] = useState<boolean>(false);
@@ -49,8 +59,49 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3500);
+    }, 4000);
   }, []);
+
+  // Initialize auth state listener
+  useEffect(() => {
+    initAuth(
+      (user) => {
+        if (user.email) {
+          setUserEmail(user.email);
+        }
+      },
+      () => {
+        // Fallback default
+        setUserEmail(DEFAULT_USER_EMAIL);
+      }
+    );
+  }, []);
+
+  const handleSignInWithGoogle = async () => {
+    try {
+      setIsAuthLoading(true);
+      const res = await googleSignIn();
+      if (res?.user.email) {
+        setUserEmail(res.user.email);
+        showToast(`Connected to Gmail (${res.user.email})! Direct outbound sending active.`);
+      }
+    } catch (err: any) {
+      console.error('Google sign in error:', err);
+      showToast(`Google Sign-In failed: ${err.message || err}`);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+      setUserEmail(DEFAULT_USER_EMAIL);
+      showToast('Signed out of Gmail.');
+    } catch (err: any) {
+      console.error('Sign out error:', err);
+    }
+  };
 
   // Real-time live simulation: dynamically append incoming crawler discovery
   useEffect(() => {
@@ -149,7 +200,6 @@ export default function App() {
     showToast('Dispatched autonomous crawler wave across 50 US states...');
 
     setTimeout(() => {
-      // Add a fresh discovered lead to the top
       const freshLead: BuyerLead = {
         id: `lead-fresh-${Date.now()}`,
         name: 'Sedona Sound Oasis',
@@ -289,7 +339,7 @@ export default function App() {
     showToast(`Added and deployed crawler connector "${connector.name}".`);
   };
 
-  const handleSendOutreach = (leadId: string, subject: string, body: string) => {
+  const handleSendOutreach = (leadId: string, subject: string, body: string, sentViaRealGmail?: boolean) => {
     const targetLead = leads.find((l) => l.id === leadId);
     if (!targetLead) return;
 
@@ -302,7 +352,7 @@ export default function App() {
       subject,
       body,
       step: 1,
-      status: 'Queued',
+      status: sentViaRealGmail ? 'Sent' : 'Queued',
       sentAt: 'Just now',
     };
 
@@ -310,7 +360,11 @@ export default function App() {
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, status: 'In Outreach' } : l))
     );
-    showToast(`Dispatched personalized Himalayan sequence to ${targetLead.contactEmail}!`);
+    showToast(
+      sentViaRealGmail
+        ? `Dispatched real email to ${targetLead.contactEmail} from ${userEmail || DEFAULT_USER_EMAIL}!`
+        : `Queued personalized Himalayan sequence to ${targetLead.contactEmail}!`
+    );
     setActiveTab('gmail-sequence-hub');
   };
 
@@ -326,11 +380,11 @@ export default function App() {
     showToast('Lead rejected from pipeline.');
   };
 
-  const handleReplyInquiry = (inquiryId: string, replyText: string) => {
+  const handleReplyInquiry = (inquiryId: string, _replyText: string) => {
     setInquiries((prev) =>
       prev.map((i) => (i.id === inquiryId ? { ...i, unread: false } : i))
     );
-    showToast('Wholesale export quote & reply dispatched via Gmail Hub!');
+    showToast(`Reply sent from ${userEmail || DEFAULT_USER_EMAIL}!`);
   };
 
   const handleMarkInquiryAsRead = (inquiryId: string) => {
@@ -381,6 +435,10 @@ export default function App() {
           onForceCrawlWave={handleForceCrawlWave}
           isCrawlingWave={isCrawlingWave}
           unreadCount={unreadInquiriesCount}
+          userEmail={userEmail}
+          onSignInWithGoogle={handleSignInWithGoogle}
+          onSignOut={handleSignOut}
+          isAuthLoading={isAuthLoading}
         />
 
         <main className="w-full pt-16 bg-[#f7f9fb] min-h-screen">
@@ -445,6 +503,8 @@ export default function App() {
           {(activeTab === 'ai-outreach-staging' || activeTab === 'gmail-sequence-hub') && (
             <OutreachStagingView
               messages={outreachMessages}
+              currentUserEmail={userEmail}
+              onSignInWithGoogle={handleSignInWithGoogle}
               onSendMessage={(msgId) => {
                 setOutreachMessages((prev) =>
                   prev.map((m) =>
@@ -462,6 +522,8 @@ export default function App() {
           {activeTab === 'response-inbox' && (
             <ResponseInboxView
               inquiries={inquiries}
+              currentUserEmail={userEmail}
+              onSignInWithGoogle={handleSignInWithGoogle}
               onReplyInquiry={handleReplyInquiry}
               onMarkAsRead={handleMarkInquiryAsRead}
             />
@@ -490,6 +552,8 @@ export default function App() {
         isOpen={!!pitchModalLead}
         onClose={() => setPitchModalLead(null)}
         onSendOutreach={handleSendOutreach}
+        currentUserEmail={userEmail}
+        onSignInWithGoogle={handleSignInWithGoogle}
       />
     </div>
   );

@@ -1,19 +1,89 @@
 import React, { useState } from 'react';
 import { OutreachMessage } from '../types';
+import { sendGmail, DEFAULT_USER_EMAIL, DEFAULT_USER_NAME } from '../services/auth';
 
 interface OutreachStagingViewProps {
   messages: OutreachMessage[];
   onSendMessage: (msgId: string) => void;
   onNewCampaign: () => void;
+  currentUserEmail?: string | null;
+  onSignInWithGoogle?: () => void;
 }
 
 export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
   messages,
   onSendMessage,
   onNewCampaign,
+  currentUserEmail = DEFAULT_USER_EMAIL,
+  onSignInWithGoogle,
 }) => {
   const [selectedMsgId, setSelectedMsgId] = useState<string>(messages[0]?.id || '');
+  const [isSending, setIsSending] = useState(false);
+  const [feedback, setFeedback] = useState<{ id: string; success: boolean; text: string } | null>(null);
+
   const activeMsg = messages.find((m) => m.id === selectedMsgId) || messages[0];
+  const senderEmail = currentUserEmail || DEFAULT_USER_EMAIL;
+
+  const handleDispatchViaGmail = async (msg: OutreachMessage) => {
+    setIsSending(true);
+    setFeedback(null);
+
+    const res = await sendGmail(msg.recipientEmail, msg.subject, msg.body, senderEmail);
+    setIsSending(false);
+
+    if (res.success) {
+      setFeedback({
+        id: msg.id,
+        success: true,
+        text: `Real email dispatched to ${msg.recipientEmail} via Gmail API (ID: ${res.messageId})!`,
+      });
+      onSendMessage(msg.id);
+    } else {
+      if (res.error === 'AUTH_REQUIRED') {
+        setFeedback({
+          id: msg.id,
+          success: false,
+          text: 'Google authentication required. Click "Connect Real Gmail" to authorize direct outbound sending.',
+        });
+      } else {
+        setFeedback({
+          id: msg.id,
+          success: false,
+          text: `Failed to send email: ${res.error}`,
+        });
+      }
+    }
+  };
+
+  const handleSendTestToSelf = async (msg: OutreachMessage) => {
+    setIsSending(true);
+    setFeedback(null);
+
+    const res = await sendGmail(senderEmail, `[TEST RUN] ${msg.subject}`, msg.body, senderEmail);
+    setIsSending(false);
+
+    if (res.success) {
+      setFeedback({
+        id: msg.id,
+        success: true,
+        text: `Test copy dispatched to your inbox (${senderEmail})! Message ID: ${res.messageId}`,
+      });
+    } else {
+      if (res.error === 'AUTH_REQUIRED') {
+        setFeedback({
+          id: msg.id,
+          success: false,
+          text: 'Google authentication required. Click "Connect Real Gmail" first.',
+        });
+      } else {
+        setFeedback({
+          id: msg.id,
+          success: false,
+          text: `Send error: ${res.error}`,
+        });
+      }
+    }
+  };
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -29,14 +99,15 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
             AI Outreach Staging & Sequence Hub
           </h1>
           <p className="text-xs text-slate-600 mt-0.5">
-            Personalized 3-touch Himalayan artisan sequences with Patan forge audio spectrograms and DHL sample dispatch tracking.
+            Sending personalized Himalayan wholesale sequences directly from{' '}
+            <strong className="text-slate-900">{DEFAULT_USER_NAME} &lt;{senderEmail}&gt;</strong> to verified US buyers.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span>Google Workspace Mailbox Synced</span>
+            <span>Gmail Connected: {senderEmail}</span>
           </div>
           <button
             type="button"
@@ -44,7 +115,7 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs bg-[#9b4500] hover:bg-[#763300] text-white shadow-xs transition-colors"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
-            <span>+ Create Himalayan Outreach Wave</span>
+            <span>+ Draft Buyer Sequence</span>
           </button>
         </div>
       </div>
@@ -56,7 +127,7 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
             Active Multi-Touch Sequence: "Himalayan 432Hz Provenance for US Sound Studios"
           </h3>
           <span className="text-xs text-emerald-700 font-mono font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-            Open Rate: 84.2% • Response Rate: 32.8%
+            Sender: {senderEmail}
           </span>
         </div>
 
@@ -124,7 +195,7 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
 
                   <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 font-mono">
                     <span>To: {msg.recipientName}</span>
-                    <span>{msg.sentAt || 'Queued for today'}</span>
+                    <span>{msg.sentAt || 'Queued'}</span>
                   </div>
                 </div>
               );
@@ -151,6 +222,10 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
 
             <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1 font-mono text-slate-600 border border-slate-200">
               <div className="flex justify-between">
+                <span>From (Real Sender):</span>
+                <span className="text-[#9b4500] font-bold">{DEFAULT_USER_NAME} &lt;{senderEmail}&gt;</span>
+              </div>
+              <div className="flex justify-between">
                 <span>Recipient:</span>
                 <span className="text-slate-900 font-semibold">{activeMsg.recipientName} &lt;{activeMsg.recipientEmail}&gt;</span>
               </div>
@@ -158,20 +233,42 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
                 <span>Account:</span>
                 <span className="text-slate-900">{activeMsg.companyName}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Forge Authenticity Tag:</span>
-                <span className="text-emerald-700">Patan Bronze Master Certificate Attached</span>
-              </div>
             </div>
 
             <div className="p-4 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 leading-relaxed font-sans whitespace-pre-line">
               {activeMsg.body}
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-[11px] text-slate-500">
-                Delivery Server: <strong className="text-slate-700">smtp.resonance-export.io (Kathmandu Outbound)</strong>
-              </span>
+            {feedback && feedback.id === activeMsg.id && (
+              <div
+                className={`p-3 rounded-lg text-xs font-semibold flex items-center justify-between ${
+                  feedback.success
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}
+              >
+                <span>{feedback.text}</span>
+                {!feedback.success && onSignInWithGoogle && (
+                  <button
+                    type="button"
+                    onClick={onSignInWithGoogle}
+                    className="px-2.5 py-1 bg-amber-600 text-white rounded font-bold text-[11px] hover:bg-amber-700 ml-2"
+                  >
+                    Connect Real Gmail
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => handleSendTestToSelf(activeMsg)}
+                disabled={isSending}
+                className="text-xs text-[#0077b5] hover:underline font-semibold text-left"
+              >
+                Send Test Copy to My Email ({senderEmail})
+              </button>
 
               <div className="flex items-center gap-2">
                 <button
@@ -182,15 +279,20 @@ export const OutreachStagingView: React.FC<OutreachStagingViewProps> = ({
                   }}
                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Copy Raw Text
+                  Copy Text
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSendMessage(activeMsg.id)}
-                  className="px-4 py-1.5 rounded-lg bg-[#9b4500] hover:bg-[#763300] text-white text-xs font-semibold shadow-xs flex items-center gap-1"
+                  disabled={isSending}
+                  onClick={() => handleDispatchViaGmail(activeMsg)}
+                  className={`px-4 py-1.5 rounded-lg bg-[#9b4500] hover:bg-[#763300] text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all ${
+                    isSending ? 'opacity-70 cursor-wait' : ''
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">send</span>
-                  <span>Dispatch via Gmail Hub</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    {isSending ? 'sync' : 'send'}
+                  </span>
+                  <span>{isSending ? 'Sending Real Email...' : 'Send Real Email via Gmail'}</span>
                 </button>
               </div>
             </div>

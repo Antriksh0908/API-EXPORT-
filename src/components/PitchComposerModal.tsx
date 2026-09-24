@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { BuyerLead } from '../types';
+import { sendGmail, DEFAULT_USER_EMAIL, DEFAULT_USER_NAME } from '../services/auth';
 
 interface PitchComposerModalProps {
   lead: BuyerLead | null;
   isOpen: boolean;
   onClose: () => void;
-  onSendOutreach: (leadId: string, emailSubject: string, emailBody: string) => void;
+  onSendOutreach: (leadId: string, emailSubject: string, emailBody: string, sentViaRealGmail?: boolean) => void;
+  currentUserEmail?: string | null;
+  onSignInWithGoogle?: () => void;
 }
 
 export const PitchComposerModal: React.FC<PitchComposerModalProps> = ({
@@ -13,14 +16,24 @@ export const PitchComposerModal: React.FC<PitchComposerModalProps> = ({
   isOpen,
   onClose,
   onSendOutreach,
+  currentUserEmail = DEFAULT_USER_EMAIL,
+  onSignInWithGoogle,
 }) => {
   const [templateType, setTemplateType] = useState<'provenance' | 'wholesale_margin' | 'custom_branding'>('provenance');
+  const [recipientEmail, setRecipientEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isSendingRealEmail, setIsSendingRealEmail] = useState(false);
+  const [sendResult, setSendResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (!lead) return;
+    setRecipientEmail(lead.contactEmail);
+    setSendResult(null);
+
+    const senderEmail = currentUserEmail || DEFAULT_USER_EMAIL;
+    const senderName = DEFAULT_USER_NAME;
 
     if (templateType === 'provenance') {
       setSubject(`Direct Kathmandu Forge Provenance: 432Hz Master Sound Bath Bowls for ${lead.name}`);
@@ -37,12 +50,13 @@ ${lead.aiPitch}
 
 Could I dispatch a 60-second acoustic audio recording and our US wholesale specification sheet (with direct FOB Kathmandu pricing and landed DHL door-to-door rates to ${lead.city})?
 
-Tashi Delek,
-Pema Tsering
-Resonance Export • Kathmandu & New Delhi`
+Warm regards,
+${senderName}
+Resonance Export • Himalayan Artisan Trade
+Email: ${senderEmail}`
       );
     } else if (templateType === 'wholesale_margin') {
-      setSubject(`Wholesale Himalayan Singeing Bowls FOB Kathmandu — Direct Studio Pricing for ${lead.name}`);
+      setSubject(`Wholesale Himalayan Singing Bowls FOB Kathmandu — Direct Studio Pricing for ${lead.name}`);
       setBody(
 `Hi ${lead.contactName.split(' ')[0]},
 
@@ -55,8 +69,10 @@ Based on our analysis of your product retail shelf, our direct forge pricing off
 
 Would you be open to reviewing our wholesale price grid and MOQ terms for your next studio stocking wave?
 
-Warm regards,
-Pema Tsering`
+Best regards,
+${senderName}
+Resonance Export
+Email: ${senderEmail}`
       );
     } else {
       setSubject(`Custom Laser Engraving & Studio Branding on 7-Metal Bronze Bowls for ${lead.name}`);
@@ -70,10 +86,12 @@ Each custom set includes individual acoustic frequency verification certificates
 Would you like to see examples of custom engraved sets we recently dispatched to top US sound healing studios?
 
 Best regards,
-Pema Tsering`
+${senderName}
+Resonance Export
+Email: ${senderEmail}`
       );
     }
-  }, [lead, templateType]);
+  }, [lead, templateType, currentUserEmail]);
 
   if (!isOpen || !lead) return null;
 
@@ -83,8 +101,41 @@ Pema Tsering`
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSend = () => {
-    onSendOutreach(lead.id, subject, body);
+  const handleSendViaRealGmail = async () => {
+    if (!recipientEmail) return;
+    setIsSendingRealEmail(true);
+    setSendResult(null);
+
+    const senderEmail = currentUserEmail || DEFAULT_USER_EMAIL;
+    const res = await sendGmail(recipientEmail, subject, body, senderEmail);
+
+    setIsSendingRealEmail(false);
+    if (res.success) {
+      setSendResult({
+        success: true,
+        msg: `Email successfully sent via Gmail to ${recipientEmail}! Message ID: ${res.messageId}`,
+      });
+      onSendOutreach(lead.id, subject, body, true);
+      setTimeout(() => {
+        onClose();
+      }, 2200);
+    } else {
+      if (res.error === 'AUTH_REQUIRED') {
+        setSendResult({
+          success: false,
+          msg: 'Please connect your Google account using the "Connect Real Gmail" button first to authorize real-time sending.',
+        });
+      } else {
+        setSendResult({
+          success: false,
+          msg: `Send error: ${res.error}`,
+        });
+      }
+    }
+  };
+
+  const handleQueueOnly = () => {
+    onSendOutreach(lead.id, subject, body, false);
     onClose();
   };
 
@@ -95,14 +146,14 @@ Pema Tsering`
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#9b4500] text-[20px]">
-              auto_awesome
+              mail
             </span>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Autonomous AI Outreach Drafter & Sequence Staging
+                Real-Time Buyer Outreach & Email Dispatch
               </h3>
               <p className="text-[11px] text-slate-500">
-                Targeting {lead.contactName} ({lead.contactTitle}) at {lead.name}
+                Sender: <strong className="text-slate-800">{DEFAULT_USER_NAME} &lt;{currentUserEmail || DEFAULT_USER_EMAIL}&gt;</strong>
               </p>
             </div>
           </div>
@@ -157,6 +208,29 @@ Pema Tsering`
 
         {/* Editor */}
         <div className="p-5 overflow-y-auto space-y-3 flex-1 text-xs">
+          {/* Recipient Input + Test Send toggle */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-semibold text-slate-600 uppercase">
+                Recipient Email Address
+              </label>
+              <button
+                type="button"
+                onClick={() => setRecipientEmail(currentUserEmail || DEFAULT_USER_EMAIL)}
+                className="text-[10px] text-[#0077b5] hover:underline font-semibold"
+              >
+                Send Test To My Email ({currentUserEmail || DEFAULT_USER_EMAIL})
+              </button>
+            </div>
+            <input
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder="buyer@soundstudio.com"
+              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-900 font-medium outline-none focus:border-[#0f172a]"
+            />
+          </div>
+
           <div>
             <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
               Subject Line
@@ -165,7 +239,7 @@ Pema Tsering`
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-900 font-medium outline-none focus:border-[#0f172a]"
+              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-900 font-medium outline-none focus:border-[#0f172a]"
             />
           </div>
 
@@ -174,24 +248,45 @@ Pema Tsering`
               <span>Personalized Email Body</span>
               <span className="text-emerald-700 font-mono text-[10px] flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                Auto-Enriched with Patan Forge Specs
+                Signed with your verified address
               </span>
             </label>
             <textarea
-              rows={12}
+              rows={11}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               className="w-full p-3 border border-slate-200 rounded-lg text-slate-900 font-sans text-xs leading-relaxed outline-none focus:border-[#0f172a]"
             />
           </div>
 
+          {sendResult && (
+            <div
+              className={`p-3 rounded-lg text-xs font-semibold flex items-center justify-between ${
+                sendResult.success
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}
+            >
+              <span>{sendResult.msg}</span>
+              {!sendResult.success && onSignInWithGoogle && (
+                <button
+                  type="button"
+                  onClick={onSignInWithGoogle}
+                  className="px-2.5 py-1 bg-amber-600 text-white rounded font-bold text-[11px] hover:bg-amber-700 ml-2 shrink-0"
+                >
+                  Connect Now
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Quick Details Callout */}
           <div className="p-2.5 bg-[#f2f4f6] rounded-lg border border-slate-200 flex items-center justify-between text-[11px]">
             <span className="text-slate-600">
-              Recipient: <strong className="text-slate-900">{lead.contactEmail}</strong>
+              Sender Mailbox: <strong className="text-slate-900">{currentUserEmail || DEFAULT_USER_EMAIL}</strong>
             </span>
             <span className="text-emerald-700 font-semibold font-mono">
-              MX Status: Deliverable (Port 25 Valid)
+              OAuth Protocol: Gmail REST API v1
             </span>
           </div>
         </div>
@@ -206,26 +301,33 @@ Pema Tsering`
             <span className="material-symbols-outlined text-[16px]">
               {copied ? 'check' : 'content_copy'}
             </span>
-            <span>{copied ? 'Copied to Clipboard!' : 'Copy Text'}</span>
+            <span>{copied ? 'Copied!' : 'Copy Text'}</span>
           </button>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleQueueOnly}
               className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-200 text-xs font-medium"
             >
-              Cancel
+              Queue in App
             </button>
             <button
               type="button"
-              onClick={handleSend}
-              className="px-4 py-1.5 rounded-lg bg-[#9b4500] hover:bg-[#763300] text-white text-xs font-semibold shadow-sm flex items-center gap-1"
+              disabled={isSendingRealEmail}
+              onClick={handleSendViaRealGmail}
+              className={`px-4 py-1.5 rounded-lg bg-[#9b4500] hover:bg-[#763300] text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all ${
+                isSendingRealEmail ? 'opacity-70 cursor-wait' : ''
+              }`}
             >
               <span className="material-symbols-outlined text-[16px]">
-                forward_to_inbox
+                {isSendingRealEmail ? 'sync' : 'send'}
               </span>
-              Push to Gmail Sequence Hub
+              <span>
+                {isSendingRealEmail
+                  ? 'Sending via Gmail API...'
+                  : 'Send Real Email via Gmail'}
+              </span>
             </button>
           </div>
         </div>

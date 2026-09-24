@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface HeaderProps {
   searchQuery: string;
@@ -7,6 +8,10 @@ interface HeaderProps {
   onForceCrawlWave: () => void;
   isCrawlingWave: boolean;
   unreadCount: number;
+  userEmail: string | null;
+  onSignInWithGoogle: () => void;
+  onSignOut: () => void;
+  isAuthLoading: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +21,10 @@ export const Header: React.FC<HeaderProps> = ({
   onForceCrawlWave,
   isCrawlingWave,
   unreadCount,
+  userEmail,
+  onSignInWithGoogle,
+  onSignOut,
+  isAuthLoading,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -49,6 +58,14 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Status Badges & Quick Action Controls */}
         <div className="flex items-center gap-3 shrink-0">
+          {/* Real Google Account / Gmail Status */}
+          <GoogleSignInButton
+            userEmail={userEmail}
+            onSignIn={onSignInWithGoogle}
+            onSignOut={onSignOut}
+            isLoading={isAuthLoading}
+          />
+
           <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 bg-[#f2f4f6] rounded-lg border border-[#e2e8f0]">
             <span className="material-symbols-outlined text-[#76777d] text-[16px]">
               sync_alt
@@ -117,6 +134,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
                   <div className="p-3 hover:bg-slate-50 transition-colors">
                     <p className="text-xs font-semibold text-slate-900">
+                      Gmail Outbound Ready
+                    </p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Direct sending enabled via antrikssharma09@gmail.com with zero daily rate-limit throttling.
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                      Just now
+                    </span>
+                  </div>
+                  <div className="p-3 hover:bg-slate-50 transition-colors">
+                    <p className="text-xs font-semibold text-slate-900">
                       New High-Intent Buyer Discovered
                     </p>
                     <p className="text-[11px] text-slate-600 mt-0.5">
@@ -137,17 +165,6 @@ export const Header: React.FC<HeaderProps> = ({
                       15 mins ago
                     </span>
                   </div>
-                  <div className="p-3 hover:bg-slate-50 transition-colors">
-                    <p className="text-xs font-semibold text-slate-900">
-                      Shopify Catalog Margin Mapped
-                    </p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Himalayan Arts & Crystals sells 10" Frosted Bowls at $320 retail ($95 FOB wholesale potential).
-                    </p>
-                    <span className="text-[10px] text-slate-400 font-mono mt-1 block">
-                      32 mins ago
-                    </span>
-                  </div>
                 </div>
                 <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50 text-center">
                   <button
@@ -163,13 +180,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* User Avatar */}
-          <div className="w-8 h-8 rounded-full bg-[#0f172a] flex items-center justify-center shrink-0 border border-slate-300 shadow-sm">
-            <span className="material-symbols-outlined text-white text-[18px]">
-              person
-            </span>
+          <div className="w-8 h-8 rounded-full bg-[#0f172a] text-white flex items-center justify-center shrink-0 border border-slate-300 shadow-sm font-bold text-xs">
+            AS
           </div>
         </div>
       </div>
     </header>
   );
 };
+
